@@ -167,6 +167,39 @@ export class CalendarTools {
           },
           required: [USER_ID_ARG, 'event_id']
         }
+      },
+      {
+        name: 'calendar_respond_event',
+        description: 'Responds to a calendar event invitation (accept, decline, or tentative). Updates your RSVP status for the event.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            [USER_ID_ARG]: {
+              type: 'string',
+              description: 'Email address of the user (must match an attendee on the event)'
+            },
+            [CALENDAR_ID_ARG]: {
+              type: 'string',
+              description: 'Calendar ID containing the event. Use "primary" for the primary calendar.',
+              default: 'primary'
+            },
+            event_id: {
+              type: 'string',
+              description: 'The ID of the calendar event to respond to'
+            },
+            response: {
+              type: 'string',
+              enum: ['accepted', 'declined', 'tentative'],
+              description: 'Your response to the event: "accepted", "declined", or "tentative"'
+            },
+            send_notification: {
+              type: 'boolean',
+              description: 'Whether to send a notification to the organizer about your response',
+              default: true
+            }
+          },
+          required: [USER_ID_ARG, 'event_id', 'response']
+        }
       }
     ];
   }
@@ -183,6 +216,8 @@ export class CalendarTools {
         return this.createCalendarEvent(args);
       case 'calendar_delete_event':
         return this.deleteCalendarEvent(args);
+      case 'calendar_respond_event':
+        return this.respondToCalendarEvent(args);
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -384,6 +419,101 @@ export class CalendarTools {
         text: JSON.stringify({
           success: false,
           message: 'Failed to delete event'
+        }, null, 2)
+      }];
+    }
+  }
+
+  private async respondToCalendarEvent(args: Record<string, any>): Promise<Array<TextContent>> {
+    const userId = args[USER_ID_ARG];
+    const eventId = args.event_id;
+    const response = args.response;
+
+    if (!userId) {
+      throw new Error(`Missing required argument: ${USER_ID_ARG}`);
+    }
+    if (!eventId) {
+      throw new Error('Missing required argument: event_id');
+    }
+    if (!response || !['accepted', 'declined', 'tentative'].includes(response)) {
+      throw new Error('Missing or invalid required argument: response (must be "accepted", "declined", or "tentative")');
+    }
+
+    try {
+      const calendarId = args[CALENDAR_ID_ARG] || 'primary';
+
+      // First, get the current event to find the attendees list
+      const eventResponse = await this.calendar.events.get({
+        calendarId,
+        eventId
+      });
+
+      const event = eventResponse.data;
+
+      if (!event.attendees || event.attendees.length === 0) {
+        return [{
+          type: 'text',
+          text: JSON.stringify({
+            success: false,
+            message: 'This event has no attendees list. You may be the organizer or this is a personal event.'
+          }, null, 2)
+        }];
+      }
+
+      // Find the current user in the attendees and update their response
+      const updatedAttendees = event.attendees.map(attendee => {
+        if (attendee.email?.toLowerCase() === userId.toLowerCase() || attendee.self) {
+          return { ...attendee, responseStatus: response };
+        }
+        return attendee;
+      });
+
+      // Check if user was found in attendees
+      const userFound = event.attendees.some(
+        attendee => attendee.email?.toLowerCase() === userId.toLowerCase() || attendee.self
+      );
+
+      if (!userFound) {
+        return [{
+          type: 'text',
+          text: JSON.stringify({
+            success: false,
+            message: `User ${userId} not found in the event's attendees list.`
+          }, null, 2)
+        }];
+      }
+
+      // Update the event with the new attendees list
+      const updateResponse = await this.calendar.events.patch({
+        calendarId,
+        eventId,
+        requestBody: {
+          attendees: updatedAttendees
+        },
+        sendUpdates: args.send_notification !== false ? 'all' : 'none'
+      });
+
+      return [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          message: `Successfully responded "${response}" to event "${event.summary}"`,
+          event: {
+            id: updateResponse.data.id,
+            summary: updateResponse.data.summary,
+            start: updateResponse.data.start,
+            end: updateResponse.data.end,
+            yourResponse: response
+          }
+        }, null, 2)
+      }];
+    } catch (error) {
+      console.error('Error responding to calendar event:', error);
+      return [{
+        type: 'text',
+        text: JSON.stringify({
+          success: false,
+          message: `Failed to respond to event: ${(error as Error).message}`
         }, null, 2)
       }];
     }
