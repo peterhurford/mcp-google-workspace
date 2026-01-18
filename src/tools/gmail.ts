@@ -174,7 +174,7 @@ export class GmailTools {
       {
         name: 'gmail_create_draft',
         description: `Creates a draft email message from scratch in Gmail with specified recipient, subject, body, and optional CC recipients.
-        
+
         Do NOT use this tool when you want to draft or send a REPLY to an existing message. This tool does NOT include any previous message content. Use the reply_gmail_email tool
         with send=false instead.`,
         inputSchema: {
@@ -183,6 +183,41 @@ export class GmailTools {
             [USER_ID_ARG]: {
               type: 'string',
               description: 'Email address of the user'
+            },
+            to: {
+              type: 'string',
+              description: 'Email address of the recipient'
+            },
+            subject: {
+              type: 'string',
+              description: 'Subject line of the email'
+            },
+            body: {
+              type: 'string',
+              description: 'Body content of the email'
+            },
+            cc: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'Optional list of email addresses to CC'
+            }
+          },
+          required: ['to', 'subject', 'body', USER_ID_ARG]
+        }
+      },
+      {
+        name: 'gmail_send_email',
+        description: `Sends a new email message immediately. Use this to send a standalone email (not a reply).
+
+        Do NOT use this tool when you want to send a REPLY to an existing message. Use the gmail_reply tool with send=true instead.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            [USER_ID_ARG]: {
+              type: 'string',
+              description: 'Email address of the user (sender)'
             },
             to: {
               type: 'string',
@@ -259,6 +294,37 @@ export class GmailTools {
             }
           },
           required: ['original_message_id', 'reply_body', USER_ID_ARG]
+        }
+      },
+      {
+        name: 'gmail_forward',
+        description: `Forwards an existing Gmail email message to a new recipient.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            [USER_ID_ARG]: {
+              type: 'string',
+              description: 'Email address of the user'
+            },
+            original_message_id: {
+              type: 'string',
+              description: 'The ID of the Gmail message to forward'
+            },
+            to: {
+              type: 'string',
+              description: 'Email address to forward the message to'
+            },
+            additional_message: {
+              type: 'string',
+              description: 'Optional message to include above the forwarded content'
+            },
+            send: {
+              type: 'boolean',
+              description: 'If true, sends the forward immediately. If false, saves as draft.',
+              default: false
+            }
+          },
+          required: ['original_message_id', 'to', USER_ID_ARG]
         }
       },
       {
@@ -372,7 +438,7 @@ export class GmailTools {
     ] as Tool[]).filter(tool => (
       (process.env.GMAIL_ALLOW_SENDING === 'true')
       ? true
-      : (tool.name !== 'gmail_reply' && tool.name !== 'gmail_create_draft')));
+      : (tool.name !== 'gmail_reply' && tool.name !== 'gmail_create_draft' && tool.name !== 'gmail_forward' && tool.name !== 'gmail_send_email')));
   }
 
   async handleTool(name: string, args: Record<string, any>): Promise<Array<TextContent | ImageContent | EmbeddedResource>> {
@@ -387,10 +453,14 @@ export class GmailTools {
         return this.bulkGetEmails(args);
       case 'gmail_create_draft':
         return this.createDraft(args);
+      case 'gmail_send_email':
+        return this.sendEmail(args);
       case 'gmail_delete_draft':
         return this.deleteDraft(args);
       case 'gmail_reply':
         return this.reply(args);
+      case 'gmail_forward':
+        return this.forward(args);
       case 'gmail_get_attachment':
         return this.getAttachment(args);
       case 'gmail_bulk_save_attachments':
@@ -667,6 +737,61 @@ export class GmailTools {
     }
   }
 
+  private async sendEmail(args: Record<string, any>): Promise<Array<TextContent>> {
+    const userId = args[USER_ID_ARG];
+    const to = args.to;
+    const subject = args.subject;
+    const body = args.body;
+    const cc = args.cc || [];
+
+    if (!userId) {
+      throw new Error(`Missing required argument: ${USER_ID_ARG}`);
+    }
+    if (!to) {
+      throw new Error('Missing required argument: to');
+    }
+    if (!subject) {
+      throw new Error('Missing required argument: subject');
+    }
+    if (!body) {
+      throw new Error('Missing required argument: body');
+    }
+
+    try {
+      const ccHeader = cc.length > 0 ? `Cc: ${cc.join(', ')}\r\n` : '';
+      const message = {
+        raw: Buffer.from(
+          `To: ${to}\r\n` +
+          `Subject: ${subject}\r\n` +
+          ccHeader +
+          `Content-Type: text/plain; charset="UTF-8"\r\n` +
+          `\r\n` +
+          `${body}`
+        ).toString('base64url')
+      };
+
+      const result = await this.gmail.users.messages.send({
+        userId,
+        requestBody: {
+          raw: message.raw
+        }
+      });
+
+      return [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          message: 'Email sent successfully',
+          id: result.data.id,
+          threadId: result.data.threadId
+        }, null, 2)
+      }];
+    } catch (error) {
+      console.error('Error sending email:', error);
+      throw error;
+    }
+  }
+
   private async deleteDraft(args: Record<string, any>): Promise<Array<TextContent>> {
     const userId = args[USER_ID_ARG];
     const draftId = args.draft_id;
@@ -698,8 +823,7 @@ export class GmailTools {
     const userId = args[USER_ID_ARG];
     const originalMessageId = args.original_message_id;
     const replyBody = args.reply_body;
-    // NEVER SEND EMAILS
-    const send = false; // args.send || false;
+    const send = args.send || false;
     const cc = args.cc || [];
 
     if (!userId) {
@@ -776,6 +900,89 @@ export class GmailTools {
       }
     } catch (error) {
       console.error('Error replying to email:', error);
+      throw error;
+    }
+  }
+
+  private async forward(args: Record<string, any>): Promise<Array<TextContent>> {
+    const userId = args[USER_ID_ARG];
+    const originalMessageId = args.original_message_id;
+    const to = args.to;
+    const additionalMessage = args.additional_message || '';
+    const send = args.send || false;
+
+    if (!userId) {
+      throw new Error(`Missing required argument: ${USER_ID_ARG}`);
+    }
+    if (!originalMessageId) {
+      throw new Error('Missing required argument: original_message_id');
+    }
+    if (!to) {
+      throw new Error('Missing required argument: to');
+    }
+
+    try {
+      // Get the original message
+      const originalMessage = await this.gmail.users.messages.get({
+        userId,
+        id: originalMessageId,
+        format: 'full'
+      });
+
+      const headers = originalMessage.data.payload?.headers?.reduce((acc: Record<string, string>, header) => {
+        if (header.name && header.value) {
+          acc[header.name.toLowerCase()] = header.value;
+        }
+        return acc;
+      }, {});
+
+      if (!headers) {
+        throw new Error('Could not extract headers from original message');
+      }
+
+      // Extract the original message body
+      const originalBody = this.extractEmailText(originalMessage.data.payload || {});
+
+      // Build forwarded message
+      const forwardedContent = additionalMessage
+        ? `${additionalMessage}\n\n---------- Forwarded message ---------\nFrom: ${headers.from || ''}\nDate: ${headers.date || ''}\nSubject: ${headers.subject || ''}\nTo: ${headers.to || ''}\n\n${originalBody}`
+        : `---------- Forwarded message ---------\nFrom: ${headers.from || ''}\nDate: ${headers.date || ''}\nSubject: ${headers.subject || ''}\nTo: ${headers.to || ''}\n\n${originalBody}`;
+
+      const message = {
+        raw: Buffer.from(
+          `To: ${to}\r\n` +
+          `Subject: Fwd: ${headers.subject || ''}\r\n` +
+          `Content-Type: text/plain; charset="UTF-8"\r\n` +
+          `\r\n` +
+          `${forwardedContent}`
+        ).toString('base64url')
+      };
+
+      if (send) {
+        await this.gmail.users.messages.send({
+          userId,
+          requestBody: {
+            raw: message.raw
+          }
+        });
+        return [{
+          type: 'text',
+          text: 'Forward sent successfully'
+        }];
+      } else {
+        const draft = await this.gmail.users.drafts.create({
+          userId,
+          requestBody: {
+            message
+          }
+        });
+        return [{
+          type: 'text',
+          text: JSON.stringify(draft.data, null, 2)
+        }];
+      }
+    } catch (error) {
+      console.error('Error forwarding email:', error);
       throw error;
     }
   }
