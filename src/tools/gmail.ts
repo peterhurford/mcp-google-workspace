@@ -12,10 +12,15 @@ function decodeBase64Data(fileData: string): Buffer {
 }
 
 export class GmailTools {
-  private gmail: ReturnType<typeof google.gmail>;
+  private _gmail?: ReturnType<typeof google.gmail>;
 
-  constructor(private gauth: GAuthService) {
-    this.gmail = google.gmail({ version: 'v1', auth: this.gauth.getClient() });
+  constructor(private gauth: GAuthService) {}
+
+  private get gmail(): ReturnType<typeof google.gmail> {
+    if (!this._gmail) {
+      this._gmail = google.gmail({ version: 'v1', auth: this.gauth.getClient() });
+    }
+    return this._gmail;
   }
 
   // Helper methods for email content extraction

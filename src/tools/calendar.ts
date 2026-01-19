@@ -6,10 +6,15 @@ import { USER_ID_ARG } from '../types/tool-handler.js';
 const CALENDAR_ID_ARG = 'calendar_id';
 
 export class CalendarTools {
-  private calendar: ReturnType<typeof google.calendar>;
+  private _calendar?: ReturnType<typeof google.calendar>;
 
-  constructor(private gauth: GAuthService) {
-    this.calendar = google.calendar({ version: 'v3', auth: this.gauth.getClient() });
+  constructor(private gauth: GAuthService) {}
+
+  private get calendar(): ReturnType<typeof google.calendar> {
+    if (!this._calendar) {
+      this._calendar = google.calendar({ version: 'v3', auth: this.gauth.getClient() });
+    }
+    return this._calendar;
   }
 
   getTools(): Tool[] {
