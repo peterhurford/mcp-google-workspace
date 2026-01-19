@@ -86,21 +86,21 @@ class GoogleWorkspaceServer {
 
     // Initialize services
     this.gauth = new GAuthService(config);
-    
+
     // Initialize server
     this.server = new Server(
       { name: "mcp-google-workspace", version: "1.0.0" },
       { capabilities: { tools: {} } }
     );
-  }
 
-  private async initializeTools() {
-    // Initialize tools after OAuth2 client is ready
+    // Initialize tools immediately so they're discoverable right away
+    // (OAuth is only needed when actually calling tools, not for listing them)
     this.tools = {
       gmail: new GmailTools(this.gauth),
       calendar: new CalendarTools(this.gauth)
     };
 
+    // Register handlers immediately so tool discovery works before OAuth completes
     this.setupHandlers();
   }
 
@@ -249,11 +249,8 @@ class GoogleWorkspaceServer {
 
   async start() {
     try {
-      // Initialize OAuth2 client first
+      // Initialize OAuth2 client (tools and handlers are already registered in constructor)
       await this.gauth.initialize();
-
-      // Initialize tools after OAuth2 is ready
-      await this.initializeTools();
 
       // Check for existing credentials
       const accounts = await this.gauth.getAccountInfo();
