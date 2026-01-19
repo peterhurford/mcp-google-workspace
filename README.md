@@ -12,7 +12,7 @@ A Model Context Protocol server for Google Workspace services. This server provi
   - Query emails with advanced search
   - Read full email content and attachments
   - Create and manage drafts
-  - Reply to emails
+  - Reply to, forward, and send emails
   - Archive emails
   - Handle attachments
   - Bulk operations support
@@ -20,8 +20,8 @@ A Model Context Protocol server for Google Workspace services. This server provi
 - **Calendar Integration**
   - List available calendars
   - View calendar events
-  - Create new events
-  - Delete events
+  - Create, update, and delete events
+  - Respond to event invitations (accept/decline/tentative)
   - Support for multiple calendars
   - Custom timezone support
 
@@ -179,6 +179,20 @@ On Windows: Edit `%APPDATA%/Claude/claude_desktop_config.json`
    - Listen on port 4100 for the OAuth2 callback
    - Store the credentials for future use in a file named `.oauth2.{email}.json`
 
+### Standalone Authentication
+
+You can also authenticate accounts outside of the MCP server using the helper script:
+
+```bash
+node auth-helper.mjs your.email@gmail.com
+```
+
+This opens a browser for OAuth consent and stores credentials for that account.
+
+### Environment Variables
+
+- `GMAIL_ALLOW_SENDING`: Set to `true` to enable email sending tools (`gmail_send_email`, `gmail_reply`, `gmail_forward`, `gmail_create_draft`). Default is `false` for safety.
+
 ## Available Tools
 
 ### Account Management
@@ -210,21 +224,30 @@ On Windows: Edit `%APPDATA%/Claude/claude_desktop_config.json`
 5. `gmail_delete_draft`
    - Delete draft emails by ID
 
-6. `gmail_reply`
+6. `gmail_send_email`
+   - Send new standalone emails immediately
+   - Support for CC recipients
+
+7. `gmail_reply`
    - Reply to existing emails
    - Option to send immediately or save as draft
    - Support for "Reply All" via CC
 
-7. `gmail_get_attachment`
-   - Download email attachments
-   - Save to disk or return as embedded resource
+8. `gmail_forward`
+   - Forward emails to new recipients
+   - Option to add a message above forwarded content
+   - Option to send immediately or save as draft
 
-8. `gmail_bulk_save_attachments`
-   - Save multiple attachments in a single operation
+10. `gmail_get_attachment`
+    - Download email attachments
+    - Save to disk or return as embedded resource
 
-9. `gmail_archive` / `gmail_bulk_archive`
-   - Move emails out of inbox
-   - Support for individual or bulk operations
+11. `gmail_bulk_save_attachments`
+    - Save multiple attachments in a single operation
+
+12. `gmail_archive` / `gmail_bulk_archive`
+    - Move emails out of inbox
+    - Support for individual or bulk operations
 
 ### Calendar Tools
 
@@ -244,9 +267,19 @@ On Windows: Edit `%APPDATA%/Claude/claude_desktop_config.json`
    - Location and description fields
    - Timezone handling
 
-4. `calendar_delete_event`
+4. `calendar_update_event`
+   - Update existing calendar events
+   - Partial updates supported (only provided fields are changed)
+   - Option for update notifications to attendees
+
+5. `calendar_delete_event`
    - Delete events by ID
    - Option for cancellation notifications
+
+6. `calendar_respond_event`
+   - Respond to event invitations
+   - Support for accept, decline, or tentative responses
+   - Option to notify the organizer
 
 ## Development
 
@@ -268,6 +301,7 @@ mcp-google-workspace/
 │   │   └── calendar.ts     # Calendar tools implementation
 │   └── types/
 │       └── tool-handler.ts # Common types and interfaces
+├── auth-helper.mjs         # Standalone authentication helper
 ├── .gauth.json             # OAuth2 credentials
 ├── .accounts.json          # Account configuration
 ├── package.json            # Project dependencies
