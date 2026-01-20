@@ -1118,9 +1118,12 @@ export class GmailTools {
     }
 
     try {
-      await this.gmail.users.messages.trash({
+      await this.gmail.users.messages.modify({
         userId,
-        id: messageId
+        id: messageId,
+        requestBody: {
+          removeLabelIds: ['INBOX']
+        }
       });
 
       return [{
@@ -1147,9 +1150,12 @@ export class GmailTools {
     try {
       const results = await Promise.all(
         messageIds.map(async (messageId: string) => {
-          await this.gmail.users.messages.trash({
+          await this.gmail.users.messages.modify({
             userId,
-            id: messageId
+            id: messageId,
+            requestBody: {
+              removeLabelIds: ['INBOX']
+            }
           });
           return {
             messageId,
