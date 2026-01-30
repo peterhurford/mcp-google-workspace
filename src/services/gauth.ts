@@ -18,6 +18,7 @@ export interface AccountInfo {
   email: string;
   accountType: string;
   extraInfo?: string;
+  displayName?: string;
 
   toDescription(): string;
 }
@@ -32,7 +33,8 @@ class AccountInfoImpl implements AccountInfo {
   constructor(
     public email: string,
     public accountType: string,
-    public extraInfo: string = ''
+    public extraInfo: string = '',
+    public displayName: string = ''
   ) {}
 
   toDescription(): string {
@@ -106,7 +108,8 @@ export class GAuthService {
       return accounts.map((acc: any) => new AccountInfoImpl(
         acc.email,
         acc.account_type,
-        acc.extra_info
+        acc.extra_info,
+        acc.display_name
       ));
     } catch (error) {
       console.error('Error reading accounts file:', error);

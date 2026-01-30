@@ -92,6 +92,26 @@ export class GmailTools {
     return result;
   }
 
+  // Get display name for a user from accounts config
+  private async getDisplayName(userId: string): Promise<string | null> {
+    try {
+      const accounts = await this.gauth.getAccountInfo();
+      const account = accounts.find(acc => acc.email === userId);
+      return account?.displayName || null;
+    } catch (error) {
+      console.error('Error getting display name:', error);
+      return null;
+    }
+  }
+
+  // Format From header with display name if available
+  private formatFromHeader(displayName: string | null, email: string): string {
+    if (displayName) {
+      return `From: ${displayName} <${email}>\r\n`;
+    }
+    return `From: ${email}\r\n`;
+  }
+
   // Encode subject line for MIME if it contains non-ASCII characters (RFC 2047)
   private encodeSubjectForMime(subject: string): string {
     // Check if subject contains non-ASCII characters
@@ -725,9 +745,14 @@ export class GmailTools {
     }
 
     try {
+      // Get display name for From header
+      const displayName = await this.getDisplayName(userId);
+      const fromHeader = this.formatFromHeader(displayName, userId);
+
       const encodedSubject = this.encodeSubjectForMime(subject);
       const message = {
         raw: Buffer.from(
+          fromHeader +
           `To: ${to}\r\n` +
           `Subject: ${encodedSubject}\r\n` +
           `Cc: ${cc.join(', ')}\r\n` +
@@ -775,10 +800,15 @@ export class GmailTools {
     }
 
     try {
+      // Get display name for From header
+      const displayName = await this.getDisplayName(userId);
+      const fromHeader = this.formatFromHeader(displayName, userId);
+
       const encodedSubject = this.encodeSubjectForMime(subject);
       const ccHeader = cc.length > 0 ? `Cc: ${cc.join(', ')}\r\n` : '';
       const message = {
         raw: Buffer.from(
+          fromHeader +
           `To: ${to}\r\n` +
           `Subject: ${encodedSubject}\r\n` +
           ccHeader +
@@ -878,9 +908,14 @@ export class GmailTools {
         throw new Error('Could not extract threadId from original message');
       }
 
+      // Get display name for From header
+      const displayName = await this.getDisplayName(userId);
+      const fromHeader = this.formatFromHeader(displayName, userId);
+
       const replySubject = this.encodeSubjectForMime(`Re: ${headers.subject || ''}`);
       const message = {
         raw: Buffer.from(
+          fromHeader +
           `In-Reply-To: ${originalMessageId}\r\n` +
           `References: ${originalMessageId}\r\n` +
           `Subject: ${replySubject}\r\n` +
@@ -967,9 +1002,14 @@ export class GmailTools {
         ? `${additionalMessage}\n\n---------- Forwarded message ---------\nFrom: ${headers.from || ''}\nDate: ${headers.date || ''}\nSubject: ${headers.subject || ''}\nTo: ${headers.to || ''}\n\n${originalBody}`
         : `---------- Forwarded message ---------\nFrom: ${headers.from || ''}\nDate: ${headers.date || ''}\nSubject: ${headers.subject || ''}\nTo: ${headers.to || ''}\n\n${originalBody}`;
 
+      // Get display name for From header
+      const displayName = await this.getDisplayName(userId);
+      const fromHeader = this.formatFromHeader(displayName, userId);
+
       const fwdSubject = this.encodeSubjectForMime(`Fwd: ${headers.subject || ''}`);
       const message = {
         raw: Buffer.from(
+          fromHeader +
           `To: ${to}\r\n` +
           `Subject: ${fwdSubject}\r\n` +
           `Content-Type: text/plain; charset="UTF-8"\r\n` +
