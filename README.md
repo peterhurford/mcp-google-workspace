@@ -113,13 +113,18 @@ Google Workspace (G Suite) APIs require OAuth2 authorization. Follow these steps
        {
          "email": "your.email@gmail.com",
          "account_type": "personal",
-         "extra_info": "Primary account with Family Calendar"
+         "extra_info": "Primary account with Family Calendar",
+         "display_name": "Your Name"
        }
      ]
    }
    ```
 
-   You can specify multiple accounts. Make sure they have access in your Google Auth app. The `extra_info` field is especially useful as you can add information here that you want to tell the AI about the account (e.g., whether it has a specific calendar).
+   You can specify multiple accounts. Make sure they have access in your Google Auth app. The fields are:
+   - `email`: The Google account email address (required)
+   - `account_type`: Type of account, e.g., "personal" or "work" (required)
+   - `extra_info`: Information to tell the AI about the account, e.g., which calendars it has (optional)
+   - `display_name`: The name to show in the "From" field when sending emails, e.g., "John Smith" (optional, defaults to just the email address)
 
 ### Claude Desktop Configuration
 
