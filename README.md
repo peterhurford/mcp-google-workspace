@@ -52,7 +52,7 @@ Try these example prompts with your AI assistant:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/j3k0/mcp-google-workspace.git
+   git clone https://github.com/peterhurford/mcp-google-workspace.git
    cd mcp-google-workspace
    ```
 
