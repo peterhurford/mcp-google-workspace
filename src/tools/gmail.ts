@@ -78,7 +78,7 @@ export class GmailTools {
   private extractEmailHeaders(headers: any[]): Record<string, string> {
     const result: Record<string, string> = {};
     const importantHeaders = ['from', 'to', 'cc', 'bcc', 'subject', 'date', 'reply-to'];
-    
+
     if (headers && Array.isArray(headers)) {
       headers.forEach(header => {
         if (header.name && header.value) {
@@ -90,6 +90,17 @@ export class GmailTools {
       });
     }
     return result;
+  }
+
+  // Encode subject line for MIME if it contains non-ASCII characters (RFC 2047)
+  private encodeSubjectForMime(subject: string): string {
+    // Check if subject contains non-ASCII characters
+    if (!/^[\x00-\x7F]*$/.test(subject)) {
+      // Use Base64 encoding for non-ASCII subjects
+      const encoded = Buffer.from(subject, 'utf-8').toString('base64');
+      return `=?UTF-8?B?${encoded}?=`;
+    }
+    return subject;
   }
 
   getTools(): Tool[] {
@@ -714,10 +725,11 @@ export class GmailTools {
     }
 
     try {
+      const encodedSubject = this.encodeSubjectForMime(subject);
       const message = {
         raw: Buffer.from(
           `To: ${to}\r\n` +
-          `Subject: ${subject}\r\n` +
+          `Subject: ${encodedSubject}\r\n` +
           `Cc: ${cc.join(', ')}\r\n` +
           `Content-Type: text/plain; charset="UTF-8"\r\n` +
           `\r\n` +
@@ -763,11 +775,12 @@ export class GmailTools {
     }
 
     try {
+      const encodedSubject = this.encodeSubjectForMime(subject);
       const ccHeader = cc.length > 0 ? `Cc: ${cc.join(', ')}\r\n` : '';
       const message = {
         raw: Buffer.from(
           `To: ${to}\r\n` +
-          `Subject: ${subject}\r\n` +
+          `Subject: ${encodedSubject}\r\n` +
           ccHeader +
           `Content-Type: text/plain; charset="UTF-8"\r\n` +
           `\r\n` +
@@ -865,11 +878,12 @@ export class GmailTools {
         throw new Error('Could not extract threadId from original message');
       }
 
+      const replySubject = this.encodeSubjectForMime(`Re: ${headers.subject || ''}`);
       const message = {
         raw: Buffer.from(
           `In-Reply-To: ${originalMessageId}\r\n` +
           `References: ${originalMessageId}\r\n` +
-          `Subject: Re: ${headers.subject || ''}\r\n` +
+          `Subject: ${replySubject}\r\n` +
           `To: ${headers.from || ''}\r\n` +
           `Cc: ${cc.join(', ')}\r\n` +
           `Content-Type: text/plain; charset="UTF-8"\r\n` +
@@ -953,10 +967,11 @@ export class GmailTools {
         ? `${additionalMessage}\n\n---------- Forwarded message ---------\nFrom: ${headers.from || ''}\nDate: ${headers.date || ''}\nSubject: ${headers.subject || ''}\nTo: ${headers.to || ''}\n\n${originalBody}`
         : `---------- Forwarded message ---------\nFrom: ${headers.from || ''}\nDate: ${headers.date || ''}\nSubject: ${headers.subject || ''}\nTo: ${headers.to || ''}\n\n${originalBody}`;
 
+      const fwdSubject = this.encodeSubjectForMime(`Fwd: ${headers.subject || ''}`);
       const message = {
         raw: Buffer.from(
           `To: ${to}\r\n` +
-          `Subject: Fwd: ${headers.subject || ''}\r\n` +
+          `Subject: ${fwdSubject}\r\n` +
           `Content-Type: text/plain; charset="UTF-8"\r\n` +
           `\r\n` +
           `${forwardedContent}`
