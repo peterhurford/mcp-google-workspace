@@ -470,6 +470,55 @@ export class GmailTools {
           },
           required: ['message_ids', USER_ID_ARG]
         }
+      },
+      {
+        name: 'gmail_bulk_modify_labels',
+        description: 'Adds or removes labels from multiple Gmail messages. Can be used to mark as read (remove UNREAD), mark as unread (add UNREAD), star/unstar, or add/remove custom labels. Use gmail_list_labels to discover available label IDs.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            [USER_ID_ARG]: {
+              type: 'string',
+              description: 'Email address of the user'
+            },
+            message_ids: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'List of Gmail message IDs to modify'
+            },
+            add_label_ids: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'Label IDs to add (e.g. ["STARRED", "UNREAD", "Label_123"])'
+            },
+            remove_label_ids: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'Label IDs to remove (e.g. ["UNREAD", "INBOX", "Label_123"])'
+            }
+          },
+          required: ['message_ids', USER_ID_ARG]
+        }
+      },
+      {
+        name: 'gmail_list_labels',
+        description: 'Lists all Gmail labels for the user, including system labels and custom labels. Returns label IDs and names.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            [USER_ID_ARG]: {
+              type: 'string',
+              description: 'Email address of the user'
+            }
+          },
+          required: [USER_ID_ARG]
+        }
       }
     ] as Tool[]).filter(tool => (
       (process.env.GMAIL_ALLOW_SENDING === 'true')
@@ -505,7 +554,10 @@ export class GmailTools {
         return this.archive(args);
       case 'gmail_bulk_archive':
         return this.bulkArchive(args);
-      // Add other tool handlers here...
+      case 'gmail_bulk_modify_labels':
+        return this.bulkModifyLabels(args);
+      case 'gmail_list_labels':
+        return this.listLabels(args);
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -1225,6 +1277,76 @@ export class GmailTools {
       }];
     } catch (error) {
       console.error('Error archiving messages:', error);
+      throw error;
+    }
+  }
+
+  private async bulkModifyLabels(args: Record<string, any>): Promise<Array<TextContent>> {
+    const userId = args[USER_ID_ARG];
+    const messageIds = args.message_ids;
+    const addLabelIds = args.add_label_ids || [];
+    const removeLabelIds = args.remove_label_ids || [];
+
+    if (!userId) {
+      throw new Error(`Missing required argument: ${USER_ID_ARG}`);
+    }
+    if (!messageIds || messageIds.length === 0) {
+      throw new Error('Missing required argument: message_ids');
+    }
+    if (addLabelIds.length === 0 && removeLabelIds.length === 0) {
+      throw new Error('At least one of add_label_ids or remove_label_ids must be provided');
+    }
+
+    try {
+      const requestBody: Record<string, any> = {};
+      if (addLabelIds.length > 0) requestBody.addLabelIds = addLabelIds;
+      if (removeLabelIds.length > 0) requestBody.removeLabelIds = removeLabelIds;
+
+      const results = await Promise.all(
+        messageIds.map(async (messageId: string) => {
+          await this.gmail.users.messages.modify({
+            userId,
+            id: messageId,
+            requestBody
+          });
+          return {
+            messageId,
+            status: 'modified'
+          };
+        })
+      );
+
+      return [{
+        type: 'text',
+        text: JSON.stringify(results, null, 2)
+      }];
+    } catch (error) {
+      console.error('Error modifying labels:', error);
+      throw error;
+    }
+  }
+
+  private async listLabels(args: Record<string, any>): Promise<Array<TextContent>> {
+    const userId = args[USER_ID_ARG];
+
+    if (!userId) {
+      throw new Error(`Missing required argument: ${USER_ID_ARG}`);
+    }
+
+    try {
+      const response = await this.gmail.users.labels.list({ userId });
+      const labels = (response.data.labels || []).map((label: any) => ({
+        id: label.id,
+        name: label.name,
+        type: label.type
+      }));
+
+      return [{
+        type: 'text',
+        text: JSON.stringify(labels, null, 2)
+      }];
+    } catch (error) {
+      console.error('Error listing labels:', error);
       throw error;
     }
   }

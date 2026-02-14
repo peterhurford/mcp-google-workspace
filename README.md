@@ -254,6 +254,17 @@ This opens a browser for OAuth consent and stores credentials for that account.
     - Move emails out of inbox
     - Support for individual or bulk operations
 
+13. `gmail_list_labels`
+    - List all Gmail labels (system and custom)
+    - Returns label IDs, names, and types
+
+14. `gmail_bulk_modify_labels`
+    - Add or remove labels from multiple messages
+    - Mark as read/unread (add/remove `UNREAD` label)
+    - Star/unstar messages (add/remove `STARRED` label)
+    - Add or remove custom labels by label ID
+    - Use `gmail_list_labels` to discover available label IDs
+
 ### Calendar Tools
 
 1. `calendar_list`
